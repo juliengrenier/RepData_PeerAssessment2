@@ -4,11 +4,12 @@ Reproducible Research Assignment 2: Storm Events Data Analysis
 # Synopsis
 This report will try to answer two questions:
 
-1. which type of event have the biggest impact on population health. 
-2. Which one have the biggest economic impact.
+1. Which type of event have the biggest impact on population health?
+2. Which one have the biggest economic impact?
 
 To answer these two questions we will use the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database which contains events from 1950 to 2011 (available here: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2).
 
+You can download the source code for this report here (https://github.com/juliengrenier/RepData_PeerAssessment2/blob/master/StormData.Rmd)
 
 # Data Processing
 
@@ -19,21 +20,24 @@ storm_data <- read.csv("StormData.csv.bz2")
 
 ## Exploring the events impact on population health:
 
-*    Aggregate the Combine Fatalities and Injuries metric per event type
+> Aggregate the Combine Fatalities and Injuries metric per event type
+
 ```{r cache=TRUE}
 storm_data <- transform(storm_data, FATALITIES_INJURIES=FATALITIES + INJURIES)
 fatalities_injuries_evtype = aggregate(cbind(FATALITIES_INJURIES, FATALITIES, INJURIES)~EVTYPE, data=storm_data, FUN=sum)
 ```
 
-* Filter out most of events as they have almost no impacts on population health.
+> Filter out most of events as they have almost no impacts on population health.
+
 ```{r cache=TRUE}
 ninetyeight_percent_quantile <- as.numeric(quantile(fatalities_injuries_evtype$FATALITIES_INJURIES, probs=c(0.98)))
 
 fatalities_injuries_evtype <- fatalities_injuries_evtype[fatalities_injuries_evtype$FATALITIES_INJURIES > ninetyeight_percent_quantile,]
 ```
 
-* Figuring out which event have the biggest impact on population health.
-```{r cache=TRUE}
+> Figuring out which event have the biggest impact on population health.
+
+```{r cache=TRUE, }
 max_fatalities_injuries= max(fatalities_injuries_evtype$FATALITIES_INJURIES)
 max_fatalities= max(fatalities_injuries_evtype$FATALITIES)
 max_injuries= max(fatalities_injuries_evtype$INJURIES)
@@ -47,15 +51,13 @@ most_dangerous_event
 
 ### Modifying the exponent colums to make it useful.
 
-First we need to list what are the possible values
+> First we need to list what are the possible values
 ```{r cache=TRUE}
 unique(storm_data$PROPDMGEXP)  # What are the possible values
 unique(storm_data$CROPDMGEXP)
 ```
 
-Based on the documentations, the k/K, m/M and b/B means thousand, millions and billions.
-For numerical values we assumed that they are power of 10. I.E 2 = 10^2, 3 = 10^3 etc.
-We will discard other values as we don't know what they might means.
+> Based on the documentations, the k/K, m/M and b/B means thousand, millions and billions.For numerical values we assumed that they are power of 10. I.E 2 = 10^2, 3 = 10^3 etc. We will discard other values as we don't know what they might means.
 
 ```{r cache=TRUE}
 library(car)  # install.packages('car')
@@ -63,23 +65,34 @@ library(car)  # install.packages('car')
 storm_data$PROPDMGEXP <- as.numeric(recode(storm_data$PROPDMGEXP, "'0'=1;'1'=10;'2'=100;'3'=1000;'4'=10000;'5'=100000;'6'=1000000;'7'=10000000;'8'=100000000;'B'=1000000000;'h'=100;'H'=100;'K'=1000;'m'=1000000;'M'=1000000;'-'=0;'?'=0;'+'=0"))
 
 storm_data$CROPDMGEXP <- as.numeric(recode(storm_data$PROPDMGEXP, "'0'=1;'1'=10;'2'=100; 'B'=1000000000;'h'=100;'H'=100;'K'=1000;'m'=1000000;'M'=1000000;'?'=0;"))
+```
 
+> Calculate the damage costs based on the exponent
+
+```{r cache=TRUE}
 storm_data <- transform(storm_data, 
               PROPDMG_TOTAL=PROPDMG * PROPDMGEXP,
               CROPDMG_TOTAL=CROPDMG * CROPDMGEXP)
 storm_data = transform(storm_data, 
               DMG_TOTAL=CROPDMG_TOTAL+PROPDMG_TOTAL)
+```
 
+> Aggregating damage costs per event type and keeping only the highest ones.
+```{r cache=TRUE}
 damages_evtype = aggregate(cbind(DMG_TOTAL, PROPDMG, CROPDMG)~EVTYPE, data=storm_data, FUN=sum)
 
 ninetyeigth_percent_quantile <- as.numeric(quantile(damages_evtype$DMG_TOTAL, probs=c(0.98)))
 damages_evtype <- damages_evtype[damages_evtype$DMG_TOTAL> ninetyeigth_percent_quantile,]
 ```
 
+
+> Displaying the most expensive kind of events.
+
 ```{r}
 most_expensive_eventtype <- as.character(with(damages_evtype, damages_evtype[which.max(DMG_TOTAL),]$EVTYPE))[1]
 most_expensive_eventtype
 ```
+
 # Results
 
 ## Plotting results of events impact on population health:
@@ -89,16 +102,15 @@ library(ggplot2)
 library(reshape2)
 melted_physical_health <- melt(fatalities_injuries_evtype, id.vars=c('EVTYPE'))
 melted_physical_health <- melted_physical_health[melted_physical_health$variable != 'FATALITIES_INJURIES',]
-ggplot(melted_physical_health, aes(x=EVTYPE, group=variable, fill=as.factor(variable)))+geom_histogram(position="dodge", aes(weight=value))+theme(axis.text.x = element_text(angle=90, hjust=1))+ylab("log scale")+scale_y_log10()+ggtitle("Health Impact Per Type Of Events") + xlab("Event Type")
+ggplot(melted_physical_health, aes(x=EVTYPE, group=variable, fill=as.factor(variable)))+geom_histogram(position="dodge", aes(weight=value))+theme(axis.text.x = element_text(angle=90, hjust=1))+ylab("Population Health Impact (log scale)")+scale_y_log10()+ggtitle("Health Impact Per Type Of Events") + xlab("Event Type")
 ```
 
-if we combine the two metrics into one we can clearly see that Tornados are the events with the biggest impact on population health. But we should also pay attention to excessive heat, lighting and thunderstorms are they also caused a lot of injuries and death.
-
+> if we combine the two metrics into one we can clearly see that Tornados are the events with the biggest impact on population health. But we should also pay attention to excessive heat, lighting and thunderstorms are they also caused a lot of injuries and death. 
 
 ```{r}
 melted_damages_evtype <- melt(damages_evtype, id.vars=c('EVTYPE'))
 melted_damages_evtype <- melted_damages_evtype[melted_damages_evtype$variable != "DMG_TOTAL",]
-ggplot(melted_damages_evtype,aes(x=EVTYPE, group=variable, fill=as.factor(variable)))+geom_histogram(position="dodge",binwidth=2, aes(weight=value))+theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ylab("Costs (log scale)") + scale_y_log10() + ggtitle("Damages Per Type Of Events") + xlab("Event Type")
+ggplot(melted_damages_evtype,aes(x=EVTYPE, group=variable, fill=as.factor(variable)))+geom_histogram(position="dodge",binwidth=2, aes(weight=value))+theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ylab("Damage Costs (log scale)") + scale_y_log10() + ggtitle("Damage Costs Per Type Of Events") + xlab("Event Type")
 ```
 
-Again when we combine property and crop damages we can clearly see that tornados are still the events with the biggest econimical impacts. But we should notes that hails and floods are causing more crop damages than tornados.
+> Again when we combine property and crop damages we can clearly see that tornados are still the events with the biggest econimical impacts. But we should notes that hails and floods are causing more crop damages than tornados.
